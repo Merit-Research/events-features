@@ -41,12 +41,14 @@ fn conv_to_csv(json_obj: json::JsonValue) -> String {
                     }
                 }
             } else if name == "RDNS" {
-                if value.len() == 1 {
+                if value.len() >= 1 {
                     csv.push_str(&format!("\"{}\",", value[0]));
                 } else if value.len() == 0 {
                     csv.push_str(&"\"\",");
                 } else {
+                    // This will never happen
                     eprintln!("Unexpected number of elements in RDNS field.");
+                    eprintln!("{:?}", json_obj);
                 }
             } else {
                 eprintln!("Unknown array: {}", name);
