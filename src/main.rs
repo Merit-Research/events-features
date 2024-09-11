@@ -9,6 +9,7 @@ use pnet::packet::tcp::TcpPacket;
 use pnet::packet::Packet;
 use base64::{Engine as _, engine::general_purpose};
 use json::JsonValue;
+use chrono::{DateTime, Utc};
 
 fn csv_header(json_obj: &json::JsonValue) -> String {
     let mut header = String::new();
@@ -64,21 +65,64 @@ fn conv_to_csv(json_obj: JsonValue) -> String {
 
 fn determine_scanner_or_backscatter(obj: &JsonValue) -> String {
     let traffic = obj["Traffic"].as_i32().unwrap();
-    if ((obj["SYN"].as_bool().unwrap() || obj["FIN"].as_bool().unwrap())
-        && (! obj["ACK"].as_bool().unwrap())) ||
-        (traffic == 0) ||
-        (traffic == 15 &&
-            ! obj["SYN"].as_bool().unwrap() &&
-            ! obj["ACK"].as_bool().unwrap() &&
-            ! obj["FIN"].as_bool().unwrap() &&
-            ! obj["PSH"].as_bool().unwrap() &&
-            ! obj["URG"].as_bool().unwrap()){
-        "Scanner".to_string()
-    } else if (traffic > 0 && traffic < 11) ||
-        (traffic > 11 && traffic < 16) {
-        "Backscatter".to_string()
+
+    const KNOWN_SCANNERS_KEYWORDS: [&str; 2] = ["censys", "internet-measurement"];
+
+    const FLOOD_THRESHOLD: i64 = 200;
+    let first = obj["First"].as_str().unwrap();
+    let last = obj["Last"].as_str().unwrap();
+
+    let f_datetime = DateTime::parse_from_rfc3339(first).unwrap();
+    let l_datetime = DateTime::parse_from_rfc3339(last).unwrap();
+
+    let f_dt_utc: DateTime<Utc> = f_datetime.with_timezone(&Utc);
+    let l_dt_utc: DateTime<Utc> = l_datetime.with_timezone(&Utc);
+
+    let f_unix = f_dt_utc.timestamp();
+    let l_unix = l_dt_utc.timestamp();
+
+    let time_diff = l_unix - f_unix;
+
+    for x in KNOWN_SCANNERS_KEYWORDS.iter() {
+        match obj["RDNS"].as_str() {
+            Some(y) => {
+                if y.contains(x) {
+                    return "Known Scanner".to_string();
+                }
+            }
+            None => continue,
+        }
+    }
+
+    if obj["SYN"].as_bool().unwrap() && !obj["ACK"].as_bool().unwrap() {
+        if time_diff > 0 &&
+            (obj["Packets"].as_i64().unwrap() / obj["UniqueDests"].as_i64().unwrap() / time_diff > FLOOD_THRESHOLD) {
+            "TCP Flood (SYN)".to_string()
+        } else {
+            "Scanner (SYN)".to_string()
+        }
+    } else if obj["FIN"].as_bool().unwrap() && !obj["ACK"].as_bool().unwrap() {
+        "Scanner (FIN)".to_string()
+    } else if traffic == 15 &&
+        !obj["SYN"].as_bool().unwrap() &&
+        !obj["ACK"].as_bool().unwrap() &&
+        !obj["FIN"].as_bool().unwrap() &&
+        !obj["PSH"].as_bool().unwrap() &&
+        !obj["URG"].as_bool().unwrap() {
+        "Scanner (NO FLAGS)".to_string()
+    } else if traffic == 0 {
+        "Scanner (ICMP)".to_string()
+    } else if traffic > 0 && traffic < 11 {
+        "Backscatter (ICMP)".to_string()
+    } else if traffic > 11 && traffic < 16 {
+        if traffic == 12 && time_diff > 0 &&
+            (obj["Packets"].as_i64().unwrap() / obj["UniqueDests"].as_i64().unwrap() / time_diff > FLOOD_THRESHOLD) {
+            "TCP Flood (SYN/ACK)".to_string()
+        } else {
+            "Backscatter (TCP)".to_string()
+        }
     } else {
-        "Unknown".to_string()
+        "Unclassified".to_string()
     }
 }
 
@@ -128,14 +172,12 @@ fn main() -> io::Result<()>{
 
         let mut header_written = false;
 
-        let mut counter = 0;
 
-        for line in reader.lines() {
-            if counter <= 2000 {
-                counter += 1;
-                continue;
+        for (i, line) in reader.lines().enumerate() {
+            if i > 10_000 {
+                break;
             }
-            counter = 0;
+
             let mut obj = json::parse(&line?).unwrap();
 
             if !header_written {
