@@ -174,10 +174,6 @@ fn main() -> io::Result<()>{
 
 
         for (i, line) in reader.lines().enumerate() {
-            if i > 10_000 {
-                break;
-            }
-
             let mut obj = json::parse(&line?).unwrap();
 
             if !header_written {
