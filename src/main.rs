@@ -97,29 +97,29 @@ fn determine_scanner_or_backscatter(obj: &JsonValue) -> String {
     if obj["SYN"].as_bool().unwrap() && !obj["ACK"].as_bool().unwrap() {
         if time_diff > 0 &&
             (obj["Packets"].as_i64().unwrap() / obj["UniqueDests"].as_i64().unwrap() / time_diff > FLOOD_THRESHOLD) {
-            "TCP Flood (SYN)".to_string()
+            "TCP SYN Flood".to_string()
         } else {
-            "Scanner (SYN)".to_string()
+            "TCP SYN Scanner".to_string()
         }
     } else if obj["FIN"].as_bool().unwrap() && !obj["ACK"].as_bool().unwrap() {
-        "Scanner (FIN)".to_string()
+        "TCP FIN Scanner".to_string()
     } else if traffic == 15 &&
         !obj["SYN"].as_bool().unwrap() &&
         !obj["ACK"].as_bool().unwrap() &&
         !obj["FIN"].as_bool().unwrap() &&
         !obj["PSH"].as_bool().unwrap() &&
         !obj["URG"].as_bool().unwrap() {
-        "Scanner (NO FLAGS)".to_string()
+        "TCP (NO FLAGS) Scanner".to_string()
     } else if traffic == 0 {
-        "Scanner (ICMP)".to_string()
+        "ICMP Scanner".to_string()
     } else if traffic > 0 && traffic < 11 {
-        "Backscatter (ICMP)".to_string()
+        "ICMP Backscatter".to_string()
     } else if traffic > 11 && traffic < 16 {
         if traffic == 12 && time_diff > 0 &&
             (obj["Packets"].as_i64().unwrap() / obj["UniqueDests"].as_i64().unwrap() / time_diff > FLOOD_THRESHOLD) {
-            "TCP Flood (SYN/ACK)".to_string()
+            "TCP Backscatter Flood".to_string()
         } else {
-            "Backscatter (TCP)".to_string()
+            "TCP Backscatter".to_string()
         }
     } else {
         "Unclassified".to_string()
