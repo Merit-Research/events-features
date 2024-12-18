@@ -173,7 +173,7 @@ fn main() -> io::Result<()>{
         let mut header_written = false;
 
 
-        for (i, line) in reader.lines().enumerate() {
+        for (_, line) in reader.lines().enumerate() {
             let mut obj = json::parse(&line?).unwrap();
 
             if !header_written {
